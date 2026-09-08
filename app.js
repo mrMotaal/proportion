@@ -82,6 +82,9 @@ const StylusEngine = {
       width,
       height,
       mode: 'draw',
+      activeTool: 'pen',
+      shapeStartX: 0,
+      shapeStartY: 0,
       color: '#182038',
       strokeWidth: 4,
       isEraser: false,
@@ -154,20 +157,21 @@ const StylusEngine = {
       inst.canvas.setPointerCapture(e.pointerId);
     } catch (err) {}
 
-    // Save snapshot before new stroke for UNDO
+    // Save snapshot before new stroke for UNDO and live shape preview
     inst.lastSnapshot = inst.ctx.getImageData(0, 0, inst.canvas.width, inst.canvas.height);
 
     const rect = inst.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    inst.shapeStartX = x;
+    inst.shapeStartY = y;
     inst.prevX = x;
     inst.prevY = y;
     inst.lastMidX = x;
     inst.lastMidY = y;
     inst.hasMoved = false;
 
-    // Immediate initial touch dot (crucial for decimal points, dots in letters like i, ج, خ, etc.)
     const ctx = inst.ctx;
     if (inst.isEraser) {
       ctx.globalCompositeOperation = 'destination-out';
@@ -178,10 +182,13 @@ const StylusEngine = {
       ctx.lineWidth = inst.strokeWidth;
     }
 
-    ctx.beginPath();
-    ctx.arc(x, y, (inst.isEraser ? inst.strokeWidth * 2 : inst.strokeWidth / 2), 0, Math.PI * 2);
-    ctx.fillStyle = inst.isEraser ? 'rgba(0,0,0,1)' : inst.color;
-    ctx.fill();
+    // Draw initial touch dot only for freehand pen mode
+    if (inst.activeTool === 'pen') {
+      ctx.beginPath();
+      ctx.arc(x, y, (inst.isEraser ? inst.strokeWidth * 2 : inst.strokeWidth / 2), 0, Math.PI * 2);
+      ctx.fillStyle = inst.isEraser ? 'rgba(0,0,0,1)' : inst.color;
+      ctx.fill();
+    }
   },
 
   draw(id, e) {
@@ -204,29 +211,93 @@ const StylusEngine = {
 
     const ctx = inst.ctx;
 
-    for (let i = 0; i < events.length; i++) {
-      const ev = events[i];
+    if (inst.activeTool === 'pen') {
+      for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        const currentX = ev.clientX - rect.left;
+        const currentY = ev.clientY - rect.top;
+
+        const dx = currentX - inst.prevX;
+        const dy = currentY - inst.prevY;
+        if (dx * dx + dy * dy < 0.2) continue; // Skip identical jitter points
+
+        inst.hasMoved = true;
+        const midX = (inst.prevX + currentX) / 2;
+        const midY = (inst.prevY + currentY) / 2;
+
+        // Continuous bezier curve: from previous midpoint through previous coordinate to new midpoint
+        ctx.beginPath();
+        ctx.moveTo(inst.lastMidX, inst.lastMidY);
+        ctx.quadraticCurveTo(inst.prevX, inst.prevY, midX, midY);
+        ctx.stroke();
+
+        inst.lastMidX = midX;
+        inst.lastMidY = midY;
+        inst.prevX = currentX;
+        inst.prevY = currentY;
+      }
+    } else {
+      // Geometric Shape Drawing with Live Interactive Preview
+      const ev = events[events.length - 1];
       const currentX = ev.clientX - rect.left;
       const currentY = ev.clientY - rect.top;
-
-      const dx = currentX - inst.prevX;
-      const dy = currentY - inst.prevY;
-      if (dx * dx + dy * dy < 0.2) continue; // Skip identical jitter points
-
       inst.hasMoved = true;
-      const midX = (inst.prevX + currentX) / 2;
-      const midY = (inst.prevY + currentY) / 2;
 
-      // Continuous bezier curve: from previous midpoint through previous coordinate to new midpoint
-      ctx.beginPath();
-      ctx.moveTo(inst.lastMidX, inst.lastMidY);
-      ctx.quadraticCurveTo(inst.prevX, inst.prevY, midX, midY);
-      ctx.stroke();
+      // Restore snapshot to erase previous frame's preview
+      ctx.putImageData(inst.lastSnapshot, 0, 0);
 
-      inst.lastMidX = midX;
-      inst.lastMidY = midY;
-      inst.prevX = currentX;
-      inst.prevY = currentY;
+      ctx.strokeStyle = inst.color;
+      ctx.lineWidth = inst.strokeWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const sx = inst.shapeStartX;
+      const sy = inst.shapeStartY;
+
+      if (inst.activeTool === 'line') {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(currentX, currentY);
+        ctx.stroke();
+      } else if (inst.activeTool === 'rect') {
+        const rx = Math.min(sx, currentX);
+        const ry = Math.min(sy, currentY);
+        const rw = Math.abs(currentX - sx);
+        const rh = Math.abs(currentY - sy);
+        ctx.strokeRect(rx, ry, rw, rh);
+      } else if (inst.activeTool === 'circle') {
+        const rx = Math.abs(currentX - sx) / 2;
+        const ry = Math.abs(currentY - sy) / 2;
+        const cx = (sx + currentX) / 2;
+        const cy = (sy + currentY) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (inst.activeTool === 'axis') {
+        // Cartesian X-Y Coordinate Axes with directional arrows
+        ctx.beginPath();
+        ctx.moveTo(sx, sy); ctx.lineTo(currentX, sy); // X-axis
+        ctx.moveTo(sx, sy); ctx.lineTo(sx, currentY); // Y-axis
+        ctx.stroke();
+
+        const arrow = Math.max(inst.strokeWidth * 2.2, 7);
+        const xDir = currentX >= sx ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(currentX, sy);
+        ctx.lineTo(currentX - xDir * arrow, sy - arrow / 1.6);
+        ctx.lineTo(currentX - xDir * arrow, sy + arrow / 1.6);
+        ctx.closePath();
+        ctx.fillStyle = inst.color;
+        ctx.fill();
+
+        const yDir = currentY >= sy ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(sx, currentY);
+        ctx.lineTo(sx - arrow / 1.6, currentY - yDir * arrow);
+        ctx.lineTo(sx + arrow / 1.6, currentY - yDir * arrow);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
   },
 
@@ -246,8 +317,8 @@ const StylusEngine = {
       try { window.getSelection().removeAllRanges(); } catch (err) {}
     }
 
-    // Connect final segment smoothly
-    if (inst.hasMoved) {
+    // Connect final segment smoothly for freehand pen
+    if (inst.activeTool === 'pen' && inst.hasMoved) {
       const ctx = inst.ctx;
       ctx.beginPath();
       ctx.moveTo(inst.lastMidX, inst.lastMidY);
@@ -389,13 +460,125 @@ function toggleStylusMode(btn) {
   AudioEngine.click();
 }
 
+function setCanvasTool(id, tool, btn) {
+  const inst = StylusEngine.canvases[id];
+  if (!inst) return;
+  inst.activeTool = tool;
+  inst.mode = 'draw';
+  inst.isEraser = false;
+
+  const toolbar = btn.closest('.stylus-toolbar');
+  if (toolbar) {
+    toolbar.querySelectorAll('.tool-btn').forEach(b => {
+      const txt = b.innerText.trim();
+      if (txt.includes('Pen') || txt.includes('Line') || txt.includes('Box') || txt.includes('Circle') || txt.includes('Axes') || txt.includes('Type') || txt.includes('Eraser')) {
+        b.classList.remove('active');
+      }
+    });
+  }
+  btn.classList.add('active');
+
+  const canvas = inst.canvas;
+  const textLayer = document.getElementById(id.replace('can-', 'text-'));
+  if (canvas) canvas.style.pointerEvents = 'auto';
+  if (textLayer) textLayer.style.display = 'none';
+
+  AudioEngine.click();
+}
+
+function exportCanvasImage(id) {
+  const inst = StylusEngine.canvases[id];
+  if (!inst) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const exportCanvas = document.createElement('canvas');
+  const padding = 24 * dpr;
+  const headerHeight = 76 * dpr;
+
+  exportCanvas.width = inst.canvas.width + padding * 2;
+  exportCanvas.height = inst.canvas.height + headerHeight + padding * 2;
+
+  const ctx = exportCanvas.getContext('2d');
+
+  // Clean White Background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+  // Draw Notebook Grid or Lines Pattern
+  const wrap = document.getElementById(id.replace('can-', 'can-wrap-'));
+  const isGrid = wrap?.classList.contains('grid-bg');
+  ctx.strokeStyle = isGrid ? '#e7eefc' : '#e3ebf8';
+  ctx.lineWidth = 1 * dpr;
+
+  if (isGrid) {
+    const gridSize = 24 * dpr;
+    for (let x = padding; x <= exportCanvas.width - padding; x += gridSize) {
+      ctx.beginPath(); ctx.moveTo(x, headerHeight + padding); ctx.lineTo(x, exportCanvas.height - padding); ctx.stroke();
+    }
+    for (let y = headerHeight + padding; y <= exportCanvas.height - padding; y += gridSize) {
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(exportCanvas.width - padding, y); ctx.stroke();
+    }
+  } else {
+    const lineStep = 32 * dpr;
+    for (let y = headerHeight + padding + 24 * dpr; y <= exportCanvas.height - padding; y += lineStep) {
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(exportCanvas.width - padding, y); ctx.stroke();
+    }
+  }
+
+  // Header Branding - Mr Ahmed Abd El-Motaal
+  ctx.fillStyle = '#182038';
+  ctx.font = `bold ${16 * dpr}px 'Outfit', sans-serif`;
+  ctx.fillText('Mr Ahmed Abd El-Motaal • Math Teacher & Content Creator', padding, padding + 22 * dpr);
+
+  ctx.fillStyle = '#5e6b8c';
+  ctx.font = `${11 * dpr}px 'Plus Jakarta Sans', sans-serif`;
+  ctx.fillText('Prep 3 • Unit 1: Numbers & Operations • Proportion | 📞 01019775590 | 📺 YouTube: mr Motaal', padding, padding + 44 * dpr);
+
+  // Border Separator
+  ctx.strokeStyle = '#6c5ce7';
+  ctx.lineWidth = 2 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(padding, headerHeight + padding - 8 * dpr);
+  ctx.lineTo(exportCanvas.width - padding, headerHeight + padding - 8 * dpr);
+  ctx.stroke();
+
+  // Draw User's Handwritten Content
+  ctx.drawImage(inst.canvas, padding, headerHeight + padding);
+
+  // Direct PNG Download
+  const link = document.createElement('a');
+  link.download = `Mr_Motaal_Math_Whiteboard_${Date.now()}.png`;
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+
+  AudioEngine.success();
+}
+
+function toggleStudioMode() {
+  const isStudio = document.body.classList.toggle('studio-recording-mode');
+  const btn = document.getElementById('studioModeBtn');
+  if (btn) {
+    btn.classList.toggle('active', isStudio);
+    const span = btn.querySelector('span');
+    if (span) span.innerText = isStudio ? 'Exit Studio' : 'Studio Mode';
+  }
+  AudioEngine.click();
+}
+
 function setCanvasMode(id, mode, btn) {
   const inst = StylusEngine.canvases[id];
   if (!inst) return;
   inst.mode = mode;
 
   const toolbar = btn.closest('.stylus-toolbar');
-  toolbar.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  if (toolbar) {
+    toolbar.querySelectorAll('.tool-btn').forEach(b => {
+      const txt = b.innerText.trim();
+      if (txt.includes('Pen') || txt.includes('Line') || txt.includes('Box') || txt.includes('Circle') || txt.includes('Axes') || txt.includes('Type') || txt.includes('Eraser')) {
+        b.classList.remove('active');
+      }
+    });
+  }
   btn.classList.add('active');
 
   const canvas = inst.canvas;
@@ -419,6 +602,18 @@ function setCanvasEraser(id, btn) {
   if (!inst) return;
   inst.isEraser = !inst.isEraser;
   btn.classList.toggle('active', inst.isEraser);
+
+  if (inst.isEraser) {
+    const toolbar = btn.closest('.stylus-toolbar');
+    if (toolbar) {
+      toolbar.querySelectorAll('.tool-btn').forEach(b => {
+        const txt = b.innerText.trim();
+        if (txt.includes('Pen') || txt.includes('Line') || txt.includes('Box') || txt.includes('Circle') || txt.includes('Axes') || txt.includes('Type')) {
+          b.classList.remove('active');
+        }
+      });
+    }
+  }
   AudioEngine.click();
 }
 
@@ -433,7 +628,7 @@ function setCanvasColor(id, color, dot) {
   dot.classList.add('active');
 
   const toolbar = dot.closest('.stylus-toolbar');
-  const eraserBtn = toolbar.querySelector('.fa-eraser')?.closest('.tool-btn');
+  const eraserBtn = toolbar?.querySelector('.fa-eraser')?.closest('.tool-btn');
   if (eraserBtn) eraserBtn.classList.remove('active');
 
   AudioEngine.click();
@@ -465,7 +660,7 @@ function clearCanvasPrompt(id) {
 }
 
 // ==========================================================================
-// 2. FULL-SCREEN IPAD SCREEN PEN OVERLAY (Ultra-Smooth & Undo)
+// 2. FULL-SCREEN IPAD SCREEN PEN OVERLAY (Ultra-Smooth, Shapes & Undo)
 // ==========================================================================
 const FullScreenPen = {
   active: false,
@@ -473,6 +668,9 @@ const FullScreenPen = {
   ctx: null,
   isDrawing: false,
   stylusOnlyMode: true,
+  activeTool: 'pen',
+  shapeStartX: 0,
+  shapeStartY: 0,
   history: [],
   lastSnapshot: null,
   prevX: 0,
@@ -560,6 +758,8 @@ const FullScreenPen = {
 
     const x = e.clientX;
     const y = e.clientY;
+    this.shapeStartX = x;
+    this.shapeStartY = y;
     this.prevX = x;
     this.prevY = y;
     this.lastMidX = x;
@@ -579,10 +779,12 @@ const FullScreenPen = {
       this.ctx.lineWidth = this.strokeWidth;
     }
 
-    this.ctx.beginPath();
-    this.ctx.arc(x, y, (this.isEraser ? this.strokeWidth * 2 : this.strokeWidth / 2), 0, Math.PI * 2);
-    this.ctx.fillStyle = this.isEraser ? 'rgba(0,0,0,1)' : (this.strokeWidth >= 12 ? 'rgba(253, 203, 110, 0.45)' : this.color);
-    this.ctx.fill();
+    if (this.activeTool === 'pen') {
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, (this.isEraser ? this.strokeWidth * 2 : this.strokeWidth / 2), 0, Math.PI * 2);
+      this.ctx.fillStyle = this.isEraser ? 'rgba(0,0,0,1)' : (this.strokeWidth >= 12 ? 'rgba(253, 203, 110, 0.45)' : this.color);
+      this.ctx.fill();
+    }
   },
 
   draw(e) {
@@ -598,28 +800,90 @@ const FullScreenPen = {
       ? e.getCoalescedEvents()
       : [e];
 
-    for (let i = 0; i < events.length; i++) {
-      const ev = events[i];
+    if (this.activeTool === 'pen') {
+      for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        const currentX = ev.clientX;
+        const currentY = ev.clientY;
+
+        const dx = currentX - this.prevX;
+        const dy = currentY - this.prevY;
+        if (dx * dx + dy * dy < 0.2) continue;
+
+        this.hasMoved = true;
+        const midX = (this.prevX + currentX) / 2;
+        const midY = (this.prevY + currentY) / 2;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.lastMidX, this.lastMidY);
+        this.ctx.quadraticCurveTo(this.prevX, this.prevY, midX, midY);
+        this.ctx.stroke();
+
+        this.lastMidX = midX;
+        this.lastMidY = midY;
+        this.prevX = currentX;
+        this.prevY = currentY;
+      }
+    } else {
+      // Fullscreen Shape Live Preview
+      const ev = events[events.length - 1];
       const currentX = ev.clientX;
       const currentY = ev.clientY;
-
-      const dx = currentX - this.prevX;
-      const dy = currentY - this.prevY;
-      if (dx * dx + dy * dy < 0.2) continue;
-
       this.hasMoved = true;
-      const midX = (this.prevX + currentX) / 2;
-      const midY = (this.prevY + currentY) / 2;
 
-      this.ctx.beginPath();
-      this.ctx.moveTo(this.lastMidX, this.lastMidY);
-      this.ctx.quadraticCurveTo(this.prevX, this.prevY, midX, midY);
-      this.ctx.stroke();
+      this.ctx.putImageData(this.lastSnapshot, 0, 0);
 
-      this.lastMidX = midX;
-      this.lastMidY = midY;
-      this.prevX = currentX;
-      this.prevY = currentY;
+      this.ctx.strokeStyle = this.strokeWidth >= 12 ? 'rgba(253, 203, 110, 0.45)' : this.color;
+      this.ctx.lineWidth = this.strokeWidth;
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
+
+      const sx = this.shapeStartX;
+      const sy = this.shapeStartY;
+
+      if (this.activeTool === 'line') {
+        this.ctx.beginPath();
+        this.ctx.moveTo(sx, sy);
+        this.ctx.lineTo(currentX, currentY);
+        this.ctx.stroke();
+      } else if (this.activeTool === 'rect') {
+        const rx = Math.min(sx, currentX);
+        const ry = Math.min(sy, currentY);
+        const rw = Math.abs(currentX - sx);
+        const rh = Math.abs(currentY - sy);
+        this.ctx.strokeRect(rx, ry, rw, rh);
+      } else if (this.activeTool === 'circle') {
+        const rx = Math.abs(currentX - sx) / 2;
+        const ry = Math.abs(currentY - sy) / 2;
+        const cx = (sx + currentX) / 2;
+        const cy = (sy + currentY) / 2;
+        this.ctx.beginPath();
+        this.ctx.ellipse(cx, cy, Math.max(rx, 1), Math.max(ry, 1), 0, 0, Math.PI * 2);
+        this.ctx.stroke();
+      } else if (this.activeTool === 'axis') {
+        this.ctx.beginPath();
+        this.ctx.moveTo(sx, sy); this.ctx.lineTo(currentX, sy);
+        this.ctx.moveTo(sx, sy); this.ctx.lineTo(sx, currentY);
+        this.ctx.stroke();
+
+        const arrow = Math.max(this.strokeWidth * 2.2, 8);
+        const xDir = currentX >= sx ? 1 : -1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(currentX, sy);
+        this.ctx.lineTo(currentX - xDir * arrow, sy - arrow / 1.6);
+        this.ctx.lineTo(currentX - xDir * arrow, sy + arrow / 1.6);
+        this.ctx.closePath();
+        this.ctx.fillStyle = this.color;
+        this.ctx.fill();
+
+        const yDir = currentY >= sy ? 1 : -1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(sx, currentY);
+        this.ctx.lineTo(sx - arrow / 1.6, currentY - yDir * arrow);
+        this.ctx.lineTo(sx + arrow / 1.6, currentY - yDir * arrow);
+        this.ctx.closePath();
+        this.ctx.fill();
+      }
     }
   },
 
@@ -637,7 +901,7 @@ const FullScreenPen = {
       try { window.getSelection().removeAllRanges(); } catch (err) {}
     }
 
-    if (this.hasMoved) {
+    if (this.activeTool === 'pen' && this.hasMoved) {
       this.ctx.beginPath();
       this.ctx.moveTo(this.lastMidX, this.lastMidY);
       this.ctx.lineTo(this.prevX, this.prevY);
@@ -687,6 +951,41 @@ const FullScreenPen = {
   }
 };
 
+function setFsTool(tool, btn) {
+  FullScreenPen.activeTool = tool;
+  FullScreenPen.isEraser = false;
+
+  const dock = btn.closest('.floating-stylus-dock');
+  if (dock) {
+    dock.querySelectorAll('#btnFsToolPen, #btnFsToolLine, #btnFsToolRect, #btnFsToolCircle, #btnFsToolAxis, #btnFsEraser').forEach(b => b.classList.remove('active'));
+  }
+  btn.classList.add('active');
+  AudioEngine.click();
+}
+
+function exportFsCanvasImage() {
+  if (!FullScreenPen.canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = FullScreenPen.canvas.width;
+  exportCanvas.height = FullScreenPen.canvas.height;
+  const ctx = exportCanvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+  ctx.drawImage(FullScreenPen.canvas, 0, 0);
+
+  ctx.fillStyle = 'rgba(24, 32, 56, 0.75)';
+  ctx.font = `bold ${14 * dpr}px 'Outfit', sans-serif`;
+  ctx.fillText('Mr Ahmed Abd El-Motaal • YouTube: mr Motaal • 01019775590', 24 * dpr, exportCanvas.height - 24 * dpr);
+
+  const link = document.createElement('a');
+  link.download = `Mr_Motaal_FullScreen_Whiteboard_${Date.now()}.png`;
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+  AudioEngine.success();
+}
+
 function undoFsCanvas() {
   FullScreenPen.undo();
 }
@@ -710,6 +1009,13 @@ function toggleFsEraser() {
   FullScreenPen.isEraser = !FullScreenPen.isEraser;
   const eraserBtn = document.getElementById('btnFsEraser');
   if (eraserBtn) eraserBtn.classList.toggle('active', FullScreenPen.isEraser);
+
+  if (FullScreenPen.isEraser) {
+    const dock = document.querySelector('.floating-stylus-dock');
+    if (dock) {
+      dock.querySelectorAll('#btnFsToolPen, #btnFsToolLine, #btnFsToolRect, #btnFsToolCircle, #btnFsToolAxis').forEach(b => b.classList.remove('active'));
+    }
+  }
   AudioEngine.click();
 }
 
@@ -1470,20 +1776,38 @@ function renderConceptTab(data) {
         <div class="notebook-workspace" id="ws-${idea.tryCanvasId}">
           <div class="stylus-toolbar">
             <div class="toolbar-group">
-              <button class="tool-btn active" onclick="setCanvasMode('${idea.tryCanvasId}', 'draw', this)">
+              <button class="tool-btn active" onclick="setCanvasTool('${idea.tryCanvasId}', 'pen', this)" title="Freehand Pen (قلم حر)">
                 <i class="fa-solid fa-pen"></i> Pen
               </button>
-              <button class="tool-btn" onclick="setCanvasMode('${idea.tryCanvasId}', 'text', this)">
+              <button class="tool-btn" onclick="setCanvasTool('${idea.tryCanvasId}', 'line', this)" title="Straight Line (خط مستقيم)">
+                <i class="fa-solid fa-ruler"></i> Line
+              </button>
+              <button class="tool-btn" onclick="setCanvasTool('${idea.tryCanvasId}', 'rect', this)" title="Rectangle / Box (مستطيل/مربع)">
+                <i class="fa-regular fa-square"></i> Box
+              </button>
+              <button class="tool-btn" onclick="setCanvasTool('${idea.tryCanvasId}', 'circle', this)" title="Circle (دائرة)">
+                <i class="fa-regular fa-circle"></i> Circle
+              </button>
+              <button class="tool-btn" onclick="setCanvasTool('${idea.tryCanvasId}', 'axis', this)" title="Coordinate Axes (محاور إحداثيات س-ص)">
+                <i class="fa-solid fa-chart-line"></i> Axes
+              </button>
+              <button class="tool-btn" onclick="setCanvasMode('${idea.tryCanvasId}', 'text', this)" title="Type mathematical steps">
                 <i class="fa-solid fa-keyboard"></i> Type
               </button>
-              <button class="tool-btn" onclick="setCanvasEraser('${idea.tryCanvasId}', this)">
+              <button class="tool-btn" onclick="setCanvasEraser('${idea.tryCanvasId}', this)" title="Eraser">
                 <i class="fa-solid fa-eraser"></i> Eraser
               </button>
               <button class="tool-btn btn-undo" onclick="undoCanvas('${idea.tryCanvasId}')" title="Undo last stroke (تراجع عن آخر خطوة)">
                 <i class="fa-solid fa-rotate-left"></i> Undo
               </button>
-              <button class="tool-btn" onclick="toggleCanvasGrid('can-wrap-${idea.id}', this)">
+            </div>
+
+            <div class="toolbar-group">
+              <button class="tool-btn" onclick="toggleCanvasGrid('can-wrap-${idea.id}', this)" title="Toggle Grid / Lines">
                 <i class="fa-solid fa-border-all"></i> Grid
+              </button>
+              <button class="tool-btn btn-export-board" onclick="exportCanvasImage('${idea.tryCanvasId}')" title="Save / Export Notes as Image (حفظ السبورة كصورة)">
+                <i class="fa-solid fa-camera"></i> Save Board
               </button>
               <button class="tool-btn stylus-indicator active" onclick="toggleStylusMode(this)" title="وضع قلم الآبل / ستايلس فقط: مفعل لمنع التقطيع ورفض راحة اليد (Palm Rejection)">
                 <i class="fa-solid fa-pen-nib"></i> <span class="stylus-mode-text">Stylus Only</span>

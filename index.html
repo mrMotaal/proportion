@@ -63,6 +63,12 @@
           <span>iPad Screen Pen</span>
         </button>
 
+        <!-- Studio Video Recording Mode Toggle -->
+        <button id="studioModeBtn" class="btn-3d btn-studio-mode" onclick="toggleStudioMode()" title="Studio Mode (وضع تصوير الدروس لليوتيوب بدون مشتتات)">
+          <i class="fa-solid fa-video"></i>
+          <span>Studio Mode</span>
+        </button>
+
         <!-- Import / Upload New Lesson Button -->
         <button id="importLessonBtn" class="icon-btn-3d" title="Import Lesson from Image/PDF">
           <i class="fa-solid fa-file-arrow-up"></i>
@@ -276,6 +282,24 @@
       </div>
 
       <div class="toolbar-group">
+        <button class="tool-btn active" id="btnFsToolPen" onclick="setFsTool('pen', this)" title="Freehand Pen (قلم حر)">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button class="tool-btn" id="btnFsToolLine" onclick="setFsTool('line', this)" title="Straight Line (خط مستقيم)">
+          <i class="fa-solid fa-ruler"></i>
+        </button>
+        <button class="tool-btn" id="btnFsToolRect" onclick="setFsTool('rect', this)" title="Rectangle / Box (مستطيل/مربع)">
+          <i class="fa-regular fa-square"></i>
+        </button>
+        <button class="tool-btn" id="btnFsToolCircle" onclick="setFsTool('circle', this)" title="Circle (دائرة)">
+          <i class="fa-regular fa-circle"></i>
+        </button>
+        <button class="tool-btn" id="btnFsToolAxis" onclick="setFsTool('axis', this)" title="Coordinate Axes (محاور إحداثيات س-ص)">
+          <i class="fa-solid fa-chart-line"></i>
+        </button>
+      </div>
+
+      <div class="toolbar-group">
         <select class="stroke-select" onchange="setFsPenWidth(this.value)">
           <option value="3">Fine 3px</option>
           <option value="6" selected>Medium 6px</option>
@@ -288,6 +312,10 @@
 
         <button class="tool-btn btn-undo" id="btnFsUndo" onclick="undoFsCanvas()" title="Undo last stroke (تراجع عن آخر خطوة)">
           <i class="fa-solid fa-rotate-left"></i> Undo
+        </button>
+
+        <button class="tool-btn btn-export-board" onclick="exportFsCanvasImage()" title="Save Board as PNG (تصدير السبورة كصورة)">
+          <i class="fa-solid fa-camera"></i> Save
         </button>
 
         <button class="tool-btn stylus-indicator active" onclick="toggleStylusMode(this)" title="وضع قلم الآبل / ستايلس فقط: مفعل لمنع التقطيع ورفض راحة اليد (Palm Rejection)">
@@ -398,5 +426,10 @@
 
   <!-- App Core JavaScript Logic -->
   <script src="app.js"></script>
+
+  <!-- Floating Studio Mode Exit Button -->
+  <button class="exit-studio-btn" onclick="toggleStudioMode()" title="Exit Studio Video Mode">
+    <i class="fa-solid fa-compress"></i> Exit Studio Mode
+  </button>
 </body>
 </html>
