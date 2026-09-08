@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Interactive Mathematics Platform by Mr Ahmed Abd El-Motaal. Unit 1: Numbers & Operations • Lesson One: Proportion. iPad Stylus Canvas, Real-World SVGs, MCQ Bank, and 3 Timed Assessment Models.">
+  <meta name="author" content="Mr Ahmed Abd El-Motaal">
+  <title>MathQuest Pro — Lesson One: Proportion • Mr Ahmed Abd El-Motaal</title>
+
+  <!-- KaTeX for High-Resolution Mathematical Typography -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- =========================================================================
+       SITE HEADER (LOCKED CREDENTIALS — MR AHMED ABD EL-MOTAAL)
+       ========================================================================= -->
+  <header class="site-header">
+    <div class="header-container">
+      <div class="brand-section">
+        <div class="avatar-3d-box" title="Mr Ahmed Abd El-Motaal">
+          <span>📐</span>
+        </div>
+        <div class="brand-meta">
+          <h1>
+            Mr Ahmed Abd El-Motaal
+            <i class="fa-solid fa-circle-check verified-badge" title="Verified Math Educator"></i>
+          </h1>
+          <div class="brand-sub">
+            <span>Math teacher and content creator</span>
+            <span class="pill-badge" id="headerStageBadge"><i class="fa-solid fa-graduation-cap"></i> Unit 1: Numbers & Operations • Proportion</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Direct Contact Buttons -->
+        <a href="tel:01019775590" class="btn-3d btn-phone-3d" title="Call Direct">
+          <i class="fa-solid fa-phone"></i>
+          <span>01019775590</span>
+        </a>
+        <a href="https://wa.me/201019775590" target="_blank" rel="noopener noreferrer" class="btn-3d btn-whatsapp-3d" title="Chat on WhatsApp">
+          <i class="fa-brands fa-whatsapp"></i>
+          <span>WhatsApp</span>
+        </a>
+        <a href="https://youtube.com/@mrmotaal?si=My_9Int5Z28bAVcB" target="_blank" rel="noopener noreferrer" class="btn-3d btn-youtube-3d" title="Visit mr Motaal Channel">
+          <i class="fa-brands fa-youtube"></i>
+          <span>mr Motaal</span>
+        </a>
+
+        <!-- Full-Screen iPad Screen Pen Mode Toggle -->
+        <button id="fullscreenPenBtn" class="btn-3d btn-stylus-mode" title="Activate Full-Screen iPad Pen Mode">
+          <i class="fa-solid fa-pen-nib"></i>
+          <span>iPad Screen Pen</span>
+        </button>
+
+        <!-- Import / Upload New Lesson Button -->
+        <button id="importLessonBtn" class="icon-btn-3d" title="Import Lesson from Image/PDF">
+          <i class="fa-solid fa-file-arrow-up"></i>
+        </button>
+
+        <!-- Dark / Light Mode Toggle -->
+        <button id="themeToggleBtn" class="icon-btn-3d" title="Toggle Theme">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       LESSON SWITCHER HUB (3D PIXAR DOCK FOR SELECTING ACTIVE LESSON)
+       ========================================================================= -->
+  <div class="lesson-switcher-bar">
+    <div class="lesson-switcher-inner">
+      <span class="switcher-label"><i class="fa-solid fa-layer-group"></i> Active Lesson:</span>
+      <div class="lesson-pills-wrap">
+        <button class="lesson-pill-btn active" id="btnLessonProportion" onclick="loadLesson('proportion')">
+          <span class="pill-num">Lesson 1</span>
+          <span>Proportion (PDF Source)</span>
+          <span class="mini-tag">Active</span>
+        </button>
+        <button class="lesson-pill-btn" id="btnLessonDistance" onclick="loadLesson('distance')">
+          <span class="pill-num">Lesson 2</span>
+          <span>The Distance Between Two Points</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       NAVIGATION TABS (PIXAR 3D PILL DOCK)
+       ========================================================================= -->
+  <div class="tabs-dock-wrapper">
+    <nav class="tabs-dock" aria-label="Lesson Sections">
+      <button class="tab-btn active" data-tab="tab-concept" id="navTabConcept">
+        <i class="fa-solid fa-book-open"></i>
+        <span>1. Concept & Practice</span>
+        <span class="tab-badge">Core</span>
+      </button>
+
+      <button class="tab-btn" data-tab="tab-mcq" id="navTabMcq">
+        <i class="fa-solid fa-list-check"></i>
+        <span>2. MCQ Revision Bank</span>
+        <span class="tab-badge">10 Qs</span>
+      </button>
+
+      <button class="tab-btn" data-tab="tab-quiz" id="navTabQuiz">
+        <i class="fa-solid fa-stopwatch"></i>
+        <span>3. Timed Quiz - 10 Marks</span>
+        <span class="tab-badge">3 Models</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- =========================================================================
+       MAIN CONTENT CONTAINER
+       ========================================================================= -->
+  <main class="main-container">
+
+    <!-- DYNAMIC HERO LESSON BANNER -->
+    <section class="lesson-hero-banner" id="lessonHeroBanner">
+      <div class="hero-content">
+        <div class="hero-tag" id="heroUnitTag">
+          <i class="fa-solid fa-scale-balanced"></i> Unit 1 • Numbers and Operations on Them
+        </div>
+        <h1 class="hero-title" id="heroLessonTitle">Lesson One: Proportion</h1>
+        <p class="hero-subtitle" id="heroLessonSubtitle">
+          Master the equality of ratios and rates, the cross-multiplication property (Product of Extremes = Product of Means), solving linear and binomial unknowns, real-world proportional applications, and graphical coordinate representations.
+        </p>
+        <div class="hero-badges-row">
+          <span class="hero-badge-pill"><i class="fa-solid fa-check-double"></i> 3 Real-World Applications</span>
+          <span class="hero-badge-pill"><i class="fa-solid fa-shapes"></i> Extremes & Means Architecture</span>
+          <span class="hero-badge-pill"><i class="fa-solid fa-pen"></i> iPad Apple Pencil Auto-Save</span>
+          <span class="hero-badge-pill"><i class="fa-solid fa-trophy"></i> 30 Assessment Quiz Questions</span>
+        </div>
+      </div>
+
+      <div class="hero-3d-visual">
+        <span class="floating-shape s1">⚖️</span>
+        <span class="floating-shape s2">🍰</span>
+        <span class="floating-shape s3">🚀</span>
+      </div>
+    </section>
+
+    <!-- #####################################################################
+         TAB 1: CONCEPT & PRACTICE
+         ##################################################################### -->
+    <div id="tab-concept" class="tab-content active">
+      <!-- Injected Dynamically based on Active Lesson via app.js -->
+      <div id="lessonConceptDynamicContainer"></div>
+    </div>
+
+    <!-- #####################################################################
+         TAB 2: MCQ REVISION BANK (10 QUESTIONS WITH COMPLETE MATHEMATICAL PROOFS)
+         ##################################################################### -->
+    <div id="tab-mcq" class="tab-content">
+      <div class="mcq-bank-container">
+        <!-- Bank Summary Header -->
+        <div class="mcq-bank-header">
+          <div>
+            <span class="pill-badge" style="margin-bottom:0.4rem;">Comprehensive Bank</span>
+            <h2 style="font-family:var(--font-heading); font-size:1.6rem; font-weight:800;" id="mcqBankHeaderTitle">MCQ Revision Bank (10 Questions)</h2>
+            <p style="color:var(--text-muted); font-size:0.95rem;">Instant evaluation with full mathematical step-by-step reasoning for every choice.</p>
+          </div>
+          <div class="mcq-progress-stat">
+            <div class="mcq-score-dial" id="mcqScoreDial">0/10</div>
+            <div>
+              <div style="font-weight:800; font-size:1rem;" id="mcqStatusText">Not Started</div>
+              <div style="color:var(--text-muted); font-size:0.82rem;">Answer all questions</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 10 Questions Injected Dynamically via app.js -->
+        <div id="mcqQuestionsList"></div>
+      </div>
+    </div>
+
+    <!-- #####################################################################
+         TAB 3: TIMED QUIZ - 10 MARKS (3 MODELS • 30 QUESTIONS TOTAL)
+         ##################################################################### -->
+    <div id="tab-quiz" class="tab-content">
+      <div class="quiz-wrapper">
+        <!-- Quiz Control Bar -->
+        <div class="quiz-top-bar">
+          <div>
+            <span class="pill-badge" style="margin-bottom:0.4rem;">Standardized Exam Simulation</span>
+            <h2 style="font-family:var(--font-heading); font-size:1.5rem; font-weight:800;" id="quizActiveModelTitle">Timed Quiz — Model #1</h2>
+          </div>
+
+          <!-- Model Switcher Tabs -->
+          <div class="model-tabs-group">
+            <button class="model-tab-btn active" onclick="switchQuizModel(0)">Quiz #1</button>
+            <button class="model-tab-btn" onclick="switchQuizModel(1)">Quiz #2</button>
+            <button class="model-tab-btn" onclick="switchQuizModel(2)">Quiz #3</button>
+          </div>
+
+          <!-- 10:00 Countdown Timer Pill -->
+          <div class="timer-pill-box" id="quizTimerBox">
+            <i class="fa-regular fa-clock"></i>
+            <span id="quizTimerText">10:00</span>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="quiz-progress-track">
+            <div class="quiz-progress-fill" id="quizProgressFill"></div>
+          </div>
+        </div>
+
+        <!-- Quiz Questions Container -->
+        <div id="quizQuestionsContainer"></div>
+
+        <!-- Submit Quiz Button Bar -->
+        <div class="submit-quiz-bar" id="submitQuizBar">
+          <button class="submit-quiz-btn" onclick="submitQuizAssessment()">
+            <i class="fa-solid fa-paper-plane"></i> Submit Quiz & View Feedback
+          </button>
+        </div>
+
+        <!-- Detailed Assessment Feedback Report -->
+        <div class="quiz-feedback-report" id="quizFeedbackReport">
+          <div class="feedback-score-header">
+            <div class="score-trophy-3d" id="scoreTrophy">🏆</div>
+            <div class="score-display-text" id="scorePercentText">100%</div>
+            <div style="font-size:1.4rem; font-weight:800; color:var(--text-main); margin-top:0.4rem;" id="scoreFractionText">10 / 10 Marks</div>
+            <div class="score-rating-badge" id="scoreRatingBadge">Outstanding Mastery!</div>
+          </div>
+
+          <!-- Breakdown List -->
+          <div id="feedbackBreakdownList"></div>
+
+          <!-- Action Buttons -->
+          <div class="feedback-actions-row">
+            <button class="btn-3d btn-primary-3d" onclick="retakeCurrentQuiz()">
+              <i class="fa-solid fa-rotate-right"></i> Retake This Quiz
+            </button>
+            <button class="btn-3d btn-stylus-mode" id="btnNextQuizModel" onclick="advanceNextQuizModel()">
+              <i class="fa-solid fa-forward-step"></i> Next Model (Quiz #2)
+            </button>
+            <button class="btn-3d" style="background:var(--bg-main); color:var(--text-main);" onclick="switchTab('tab-concept')">
+              <i class="fa-solid fa-book"></i> Review Lesson Concepts
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- =========================================================================
+       FULL-SCREEN IPAD SCREEN PEN MODE OVERLAY
+       ========================================================================= -->
+  <div class="fullscreen-pen-overlay" id="fullscreenPenOverlay">
+    <canvas id="fullscreenPenCanvas" class="fullscreen-pen-canvas"></canvas>
+
+    <!-- Floating Stylus Dock -->
+    <div class="floating-stylus-dock">
+      <div class="dock-timer-badge" id="dockStopwatch">⏱️ 00:00</div>
+
+      <div class="toolbar-group">
+        <div class="color-dot active" style="background:#6c5ce7;" onclick="setFsPenColor('#6c5ce7', this)"></div>
+        <div class="color-dot" style="background:#eb4d4b;" onclick="setFsPenColor('#eb4d4b', this)"></div>
+        <div class="color-dot" style="background:#00b894;" onclick="setFsPenColor('#00b894', this)"></div>
+        <div class="color-dot" style="background:#182038;" onclick="setFsPenColor('#182038', this)"></div>
+        <div class="color-dot" style="background:#fdcb6e;" onclick="setFsPenColor('#fdcb6e', this)"></div>
+      </div>
+
+      <div class="toolbar-group">
+        <select class="stroke-select" onchange="setFsPenWidth(this.value)">
+          <option value="3">Fine 3px</option>
+          <option value="6" selected>Medium 6px</option>
+          <option value="12">Highlighter 12px</option>
+        </select>
+
+        <button class="tool-btn" id="btnFsEraser" onclick="toggleFsEraser()">
+          <i class="fa-solid fa-eraser"></i>
+        </button>
+
+        <button class="tool-btn" onclick="clearFsCanvas()">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+
+        <button class="tool-btn" style="background:#eb4d4b; color:#fff;" onclick="exitFsPenMode()">
+          <i class="fa-solid fa-xmark"></i> Exit Pen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       LESSON IMPORTER / CONVERTER MODAL (PDF / IMAGE CONVERSION)
+       ========================================================================= -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal-box">
+      <button class="modal-close-btn" onclick="closeImportModal()">&times;</button>
+      <div style="text-align:center; margin-bottom:1.25rem;">
+        <span class="pill-badge" style="margin-bottom:0.5rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> Lesson Engine Hub</span>
+        <h3 style="font-family:var(--font-heading); font-size:1.5rem; font-weight:800;">Import & Transform New Math Lesson</h3>
+        <p style="color:var(--text-muted); font-size:0.9rem;">Upload a PDF file or photo of any lesson sheet to convert it into this interactive system.</p>
+      </div>
+
+      <div class="dropzone-box" id="dropzoneBox" onclick="document.getElementById('fileUploadInput').click()">
+        <i class="fa-solid fa-cloud-arrow-up" style="font-size:3rem; color:var(--primary); margin-bottom:0.75rem;"></i>
+        <h4 style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700;">Drag & Drop PDF or Image Here</h4>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.3rem;">Supports .PDF, .PNG, .JPG lesson worksheets</p>
+        <input type="file" id="fileUploadInput" accept="application/pdf,image/*" style="display:none;" onchange="handleLessonFileUpload(event)">
+      </div>
+
+      <div style="background:var(--bg-main); border-radius:var(--radius-md); padding:1rem; border:1px solid var(--border-light); font-size:0.88rem; color:var(--text-muted);">
+        <strong>💡 Teacher Pro-Tip:</strong> Currently loaded: <em>Lesson One: Proportion</em> & <em>The Distance Between Two Points</em>. Any newly uploaded PDF or image will be processed into this interactive 3D Pixar platform!
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SITE FOOTER (LOCKED CREDENTIALS — MR AHMED ABD EL-MOTAAL)
+       ========================================================================= -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-col">
+        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+          <div class="avatar-3d-box" style="width:46px; height:46px; font-size:1.4rem;">📐</div>
+          <div>
+            <h3 style="margin-bottom:0.1rem;">Mr Ahmed Abd El-Motaal</h3>
+            <span style="font-size:0.82rem; color:var(--text-muted); font-weight:600;">Math teacher and content creator</span>
+          </div>
+        </div>
+        <p style="font-size:0.9rem; line-height:1.6; color:var(--text-muted);">
+          Empowering middle and high school students with engaging, interactive, visual mathematics. Dedicated to precision proofs, step-by-step clarity, and top exam preparation.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h3>Direct Communication</h3>
+        <ul class="footer-links-list">
+          <li>
+            <a href="tel:01019775590">
+              <i class="fa-solid fa-phone" style="color:var(--accent-cyan);"></i>
+              <span>Phone: 01019775590</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://wa.me/201019775590" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-whatsapp" style="color:#25D366;"></i>
+              <span>WhatsApp Direct Chat</span>
+            </a>
+          </li>
+          <li>
+            <a href="https://youtube.com/@mrmotaal?si=My_9Int5Z28bAVcB" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-youtube" style="color:#FF0000;"></i>
+              <span>Official Channel: mr Motaal</span>
+            </a>
+          </li>
+          <li>
+            <span><i class="fa-solid fa-graduation-cap" style="color:var(--primary);"></i> Math Teacher & Content Creator</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h3>Interactive Lesson Hub</h3>
+        <ul class="footer-links-list">
+          <li><a href="#tab-concept" onclick="switchTab('tab-concept')"><i class="fa-solid fa-angle-right"></i> 1. Concept & Practice</a></li>
+          <li><a href="#tab-mcq" onclick="switchTab('tab-mcq')"><i class="fa-solid fa-angle-right"></i> 2. MCQ Revision Bank (10 Qs)</a></li>
+          <li><a href="#tab-quiz" onclick="switchTab('tab-quiz')"><i class="fa-solid fa-angle-right"></i> 3. Timed Quiz - 10 Marks (3 Models)</a></li>
+          <li><a href="javascript:void(0)" onclick="openImportModal()"><i class="fa-solid fa-cloud-arrow-up"></i> Import New PDF / Image Lesson</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom-bar">
+      <div>
+        &copy; 2026 MathQuest Pro • Created for <strong>Mr Ahmed Abd El-Motaal</strong>. All rights reserved.
+      </div>
+      <div>
+        Built with High-Performance Vanilla HTML5, CSS3 & Stylus Canvas Engine.
+      </div>
+    </div>
+  </footer>
+
+  <!-- App Core JavaScript Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
