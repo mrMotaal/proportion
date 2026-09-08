@@ -97,6 +97,25 @@ const StylusEngine = {
 
     this.restoreCanvas(id);
 
+    // Prevent drag & drop, selection, and context menus on the canvas
+    canvas.setAttribute('draggable', 'false');
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('selectstart', (e) => e.preventDefault());
+    canvas.addEventListener('touchstart', (e) => {
+      if (this.canvases[id]?.mode === 'draw') e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      if (this.canvases[id]?.mode === 'draw') e.preventDefault();
+    }, { passive: false });
+
+    const wrapEl = canvas.parentElement;
+    if (wrapEl) {
+      wrapEl.addEventListener('contextmenu', (e) => e.preventDefault());
+      wrapEl.addEventListener('selectstart', (e) => {
+        if (this.canvases[id]?.mode === 'draw') e.preventDefault();
+      });
+    }
+
     canvas.addEventListener('pointerdown', (e) => this.startDraw(id, e));
     canvas.addEventListener('pointermove', (e) => this.draw(id, e));
     canvas.addEventListener('pointerup', (e) => this.stopDraw(id, e));
@@ -113,11 +132,19 @@ const StylusEngine = {
   },
 
   startDraw(id, e) {
+    // Dismiss any active text selection or iOS callout popup immediately
+    if (window.getSelection) {
+      try { window.getSelection().removeAllRanges(); } catch (err) {}
+    }
+
     // 1. REJECT FINGER TOUCH (Apple Pencil / Stylus / Mouse ONLY)
     // Prevents accidental finger writing and acts as True Palm Rejection
     if (this.stylusOnlyMode && e.pointerType === 'touch') {
+      e.preventDefault(); // Stop iOS from initiating text selection on palm press!
       return;
     }
+
+    e.preventDefault();
 
     const inst = this.canvases[id];
     if (!inst || inst.mode !== 'draw') return;
@@ -158,7 +185,12 @@ const StylusEngine = {
   },
 
   draw(id, e) {
-    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+    if (this.stylusOnlyMode && e.pointerType === 'touch') {
+      e.preventDefault();
+      return;
+    }
+
+    e.preventDefault();
 
     const inst = this.canvases[id];
     if (!inst || !inst.isDrawing) return;
@@ -202,11 +234,16 @@ const StylusEngine = {
     const inst = this.canvases[id];
     if (!inst || !inst.isDrawing) return;
 
+    if (e) e.preventDefault();
     inst.isDrawing = false;
     if (e && e.pointerId) {
       try {
         inst.canvas.releasePointerCapture(e.pointerId);
       } catch (err) {}
+    }
+
+    if (window.getSelection) {
+      try { window.getSelection().removeAllRanges(); } catch (err) {}
     }
 
     // Connect final segment smoothly
@@ -269,6 +306,38 @@ const StylusEngine = {
     Object.keys(this.canvases).forEach((id) => this.restoreCanvas(id));
   },
 
+  handleResize() {
+    clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => {
+      Object.keys(this.canvases).forEach((id) => {
+        const inst = this.canvases[id];
+        if (!inst || !inst.canvas) return;
+        const wrap = inst.canvas.parentElement;
+        if (!wrap) return;
+        const rect = wrap.getBoundingClientRect();
+        const newWidth = rect.width;
+        if (newWidth && Math.abs(newWidth - inst.width) > 5) {
+          const tempUrl = inst.canvas.toDataURL();
+          const dpr = window.devicePixelRatio || 1;
+          inst.width = newWidth;
+          inst.canvas.width = newWidth * dpr;
+          inst.canvas.height = inst.height * dpr;
+          inst.canvas.style.width = newWidth + 'px';
+          inst.canvas.style.height = inst.height + 'px';
+          const ctx = inst.canvas.getContext('2d', { willReadFrequently: true });
+          ctx.scale(dpr, dpr);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          inst.ctx = ctx;
+
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0, newWidth, inst.height);
+          img.src = tempUrl;
+        }
+      });
+    }, 250);
+  },
+
   clearCanvas(id) {
     const inst = this.canvases[id];
     if (!inst) return;
@@ -278,12 +347,27 @@ const StylusEngine = {
     if (!inst.history) inst.history = [];
     inst.history.push(snapshot);
 
-    inst.ctx.clearRect(0, 0, inst.width, inst.height);
+    inst.ctx.save();
+    inst.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    inst.ctx.clearRect(0, 0, inst.canvas.width, inst.canvas.height);
+    inst.ctx.restore();
     localStorage.removeItem('math_canvas_' + id);
     delete this.buffers[id];
     AudioEngine.click();
   }
 };
+
+// Global Orientation & Resize Listeners
+window.addEventListener('resize', () => StylusEngine.handleResize());
+window.addEventListener('orientationchange', () => StylusEngine.handleResize());
+
+// Global Selection Guardian: Clear accidental text selections while drawing
+document.addEventListener('selectionchange', () => {
+  const isAnyDrawing = Object.values(StylusEngine.canvases).some(c => c.isDrawing) || FullScreenPen.isDrawing;
+  if (isAnyDrawing && window.getSelection) {
+    try { window.getSelection().removeAllRanges(); } catch (err) {}
+  }
+});
 
 function undoCanvas(id) {
   StylusEngine.undo(id);
@@ -410,6 +494,12 @@ const FullScreenPen = {
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
+    this.canvas.setAttribute('draggable', 'false');
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('selectstart', (e) => e.preventDefault());
+    this.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    this.canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
     this.canvas.addEventListener('pointerdown', (e) => this.start(e));
     this.canvas.addEventListener('pointermove', (e) => this.draw(e));
     this.canvas.addEventListener('pointerup', (e) => this.stop(e));
@@ -451,8 +541,16 @@ const FullScreenPen = {
   },
 
   start(e) {
-    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+    if (window.getSelection) {
+      try { window.getSelection().removeAllRanges(); } catch (err) {}
+    }
 
+    if (this.stylusOnlyMode && e.pointerType === 'touch') {
+      e.preventDefault();
+      return;
+    }
+
+    e.preventDefault();
     this.isDrawing = true;
     try {
       this.canvas.setPointerCapture(e.pointerId);
@@ -488,7 +586,12 @@ const FullScreenPen = {
   },
 
   draw(e) {
-    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+    if (this.stylusOnlyMode && e.pointerType === 'touch') {
+      e.preventDefault();
+      return;
+    }
+
+    e.preventDefault();
     if (!this.isDrawing) return;
 
     const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length > 0)
@@ -522,11 +625,16 @@ const FullScreenPen = {
 
   stop(e) {
     if (!this.isDrawing) return;
+    if (e) e.preventDefault();
     this.isDrawing = false;
     if (e && e.pointerId) {
       try {
         this.canvas.releasePointerCapture(e.pointerId);
       } catch (err) {}
+    }
+
+    if (window.getSelection) {
+      try { window.getSelection().removeAllRanges(); } catch (err) {}
     }
 
     if (this.hasMoved) {
@@ -554,7 +662,10 @@ const FullScreenPen = {
     if (this.ctx && this.canvas) {
       const snapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
       this.history.push(snapshot);
+      this.ctx.save();
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.restore();
     }
     AudioEngine.click();
   },
