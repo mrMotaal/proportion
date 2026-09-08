@@ -282,11 +282,19 @@
           <option value="12">Highlighter 12px</option>
         </select>
 
-        <button class="tool-btn" id="btnFsEraser" onclick="toggleFsEraser()">
+        <button class="tool-btn" id="btnFsEraser" onclick="toggleFsEraser()" title="Eraser">
           <i class="fa-solid fa-eraser"></i>
         </button>
 
-        <button class="tool-btn" onclick="clearFsCanvas()">
+        <button class="tool-btn btn-undo" id="btnFsUndo" onclick="undoFsCanvas()" title="Undo last stroke (تراجع عن آخر خطوة)">
+          <i class="fa-solid fa-rotate-left"></i> Undo
+        </button>
+
+        <button class="tool-btn stylus-indicator active" onclick="toggleStylusMode(this)" title="وضع قلم الآبل / ستايلس فقط: مفعل لمنع التقطيع ورفض راحة اليد (Palm Rejection)">
+          <i class="fa-solid fa-pen-nib"></i> <span class="stylus-mode-text">Stylus Only</span>
+        </button>
+
+        <button class="tool-btn" onclick="clearFsCanvas()" title="Clear screen">
           <i class="fa-solid fa-trash-can"></i>
         </button>
 

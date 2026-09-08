@@ -47,11 +47,13 @@ const AudioEngine = {
 };
 
 // ==========================================================================
-// 1. IPAD STYLUS & NOTEBOOK CANVAS ENGINE (Hi-DPI & Auto-Save)
+// ==========================================================================
+// 1. IPAD STYLUS & NOTEBOOK CANVAS ENGINE (Hi-DPI, Palm Rejection & Undo)
 // ==========================================================================
 const StylusEngine = {
   canvases: {},
   buffers: {}, // In-memory offscreen buffers to prevent stroke loss on switchTab
+  stylusOnlyMode: true, // Apple Pencil / Stylus & Mouse only (Finger rejected to prevent choppy writing & palm interference)
 
   initCanvas(id) {
     const canvas = document.getElementById(id);
@@ -68,7 +70,7 @@ const StylusEngine = {
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.scale(dpr, dpr);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -84,16 +86,21 @@ const StylusEngine = {
       strokeWidth: 4,
       isEraser: false,
       isDrawing: false,
-      lastX: 0,
-      lastY: 0
+      history: [],
+      lastSnapshot: null,
+      prevX: 0,
+      prevY: 0,
+      lastMidX: 0,
+      lastMidY: 0,
+      hasMoved: false
     };
 
     this.restoreCanvas(id);
 
     canvas.addEventListener('pointerdown', (e) => this.startDraw(id, e));
     canvas.addEventListener('pointermove', (e) => this.draw(id, e));
-    canvas.addEventListener('pointerup', () => this.stopDraw(id));
-    canvas.addEventListener('pointercancel', () => this.stopDraw(id));
+    canvas.addEventListener('pointerup', (e) => this.stopDraw(id, e));
+    canvas.addEventListener('pointercancel', (e) => this.stopDraw(id, e));
 
     const textLayer = document.getElementById(id.replace('can-', 'text-'));
     if (textLayer) {
@@ -106,53 +113,130 @@ const StylusEngine = {
   },
 
   startDraw(id, e) {
+    // 1. REJECT FINGER TOUCH (Apple Pencil / Stylus / Mouse ONLY)
+    // Prevents accidental finger writing and acts as True Palm Rejection
+    if (this.stylusOnlyMode && e.pointerType === 'touch') {
+      return;
+    }
+
     const inst = this.canvases[id];
     if (!inst || inst.mode !== 'draw') return;
+
     inst.isDrawing = true;
-    inst.canvas.setPointerCapture(e.pointerId);
+    try {
+      inst.canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
+    // Save snapshot before new stroke for UNDO
+    inst.lastSnapshot = inst.ctx.getImageData(0, 0, inst.canvas.width, inst.canvas.height);
 
     const rect = inst.canvas.getBoundingClientRect();
-    inst.lastX = e.clientX - rect.left;
-    inst.lastY = e.clientY - rect.top;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-    AudioEngine.click();
-  },
+    inst.prevX = x;
+    inst.prevY = y;
+    inst.lastMidX = x;
+    inst.lastMidY = y;
+    inst.hasMoved = false;
 
-  draw(id, e) {
-    const inst = this.canvases[id];
-    if (!inst || !inst.isDrawing) return;
-
-    const rect = inst.canvas.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-
+    // Immediate initial touch dot (crucial for decimal points, dots in letters like i, ج, خ, etc.)
     const ctx = inst.ctx;
-    ctx.beginPath();
-    ctx.moveTo(inst.lastX, inst.lastY);
-
-    const midX = (inst.lastX + currentX) / 2;
-    const midY = (inst.lastY + currentY) / 2;
-    ctx.quadraticCurveTo(inst.lastX, inst.lastY, midX, midY);
-
     if (inst.isEraser) {
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = inst.strokeWidth * 3.5;
+      ctx.lineWidth = inst.strokeWidth * 4;
     } else {
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = inst.color;
       ctx.lineWidth = inst.strokeWidth;
     }
 
-    ctx.stroke();
-    inst.lastX = currentX;
-    inst.lastY = currentY;
+    ctx.beginPath();
+    ctx.arc(x, y, (inst.isEraser ? inst.strokeWidth * 2 : inst.strokeWidth / 2), 0, Math.PI * 2);
+    ctx.fillStyle = inst.isEraser ? 'rgba(0,0,0,1)' : inst.color;
+    ctx.fill();
   },
 
-  stopDraw(id) {
+  draw(id, e) {
+    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+
     const inst = this.canvases[id];
     if (!inst || !inst.isDrawing) return;
+
+    const rect = inst.canvas.getBoundingClientRect();
+
+    // High-frequency iPad digitizer sampling: extract all coalesced sub-frame points
+    const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length > 0)
+      ? e.getCoalescedEvents()
+      : [e];
+
+    const ctx = inst.ctx;
+
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      const currentX = ev.clientX - rect.left;
+      const currentY = ev.clientY - rect.top;
+
+      const dx = currentX - inst.prevX;
+      const dy = currentY - inst.prevY;
+      if (dx * dx + dy * dy < 0.2) continue; // Skip identical jitter points
+
+      inst.hasMoved = true;
+      const midX = (inst.prevX + currentX) / 2;
+      const midY = (inst.prevY + currentY) / 2;
+
+      // Continuous bezier curve: from previous midpoint through previous coordinate to new midpoint
+      ctx.beginPath();
+      ctx.moveTo(inst.lastMidX, inst.lastMidY);
+      ctx.quadraticCurveTo(inst.prevX, inst.prevY, midX, midY);
+      ctx.stroke();
+
+      inst.lastMidX = midX;
+      inst.lastMidY = midY;
+      inst.prevX = currentX;
+      inst.prevY = currentY;
+    }
+  },
+
+  stopDraw(id, e) {
+    const inst = this.canvases[id];
+    if (!inst || !inst.isDrawing) return;
+
     inst.isDrawing = false;
+    if (e && e.pointerId) {
+      try {
+        inst.canvas.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+
+    // Connect final segment smoothly
+    if (inst.hasMoved) {
+      const ctx = inst.ctx;
+      ctx.beginPath();
+      ctx.moveTo(inst.lastMidX, inst.lastMidY);
+      ctx.lineTo(inst.prevX, inst.prevY);
+      ctx.stroke();
+    }
+
+    // Commit snapshot to Undo stack
+    if (inst.lastSnapshot) {
+      if (!inst.history) inst.history = [];
+      inst.history.push(inst.lastSnapshot);
+      if (inst.history.length > 30) inst.history.shift();
+      inst.lastSnapshot = null;
+    }
+
     this.saveCanvas(id);
+  },
+
+  undo(id) {
+    const inst = this.canvases[id];
+    if (!inst || !inst.history || inst.history.length === 0) return;
+
+    const prevState = inst.history.pop();
+    inst.ctx.putImageData(prevState, 0, 0);
+    this.saveCanvas(id);
+    AudioEngine.click();
   },
 
   saveCanvas(id) {
@@ -188,12 +272,38 @@ const StylusEngine = {
   clearCanvas(id) {
     const inst = this.canvases[id];
     if (!inst) return;
+
+    // Push current snapshot into history so Clear itself can be UNDONE!
+    const snapshot = inst.ctx.getImageData(0, 0, inst.canvas.width, inst.canvas.height);
+    if (!inst.history) inst.history = [];
+    inst.history.push(snapshot);
+
     inst.ctx.clearRect(0, 0, inst.width, inst.height);
     localStorage.removeItem('math_canvas_' + id);
     delete this.buffers[id];
     AudioEngine.click();
   }
 };
+
+function undoCanvas(id) {
+  StylusEngine.undo(id);
+}
+
+function toggleStylusMode(btn) {
+  StylusEngine.stylusOnlyMode = !StylusEngine.stylusOnlyMode;
+  FullScreenPen.stylusOnlyMode = StylusEngine.stylusOnlyMode;
+
+  const allBadges = document.querySelectorAll('.stylus-indicator');
+  allBadges.forEach(b => {
+    b.classList.toggle('active', StylusEngine.stylusOnlyMode);
+    b.classList.toggle('touch-allowed', !StylusEngine.stylusOnlyMode);
+    const txt = b.querySelector('.stylus-mode-text');
+    if (txt) {
+      txt.innerText = StylusEngine.stylusOnlyMode ? 'Stylus Only' : 'Touch Allowed';
+    }
+  });
+  AudioEngine.click();
+}
 
 function setCanvasMode(id, mode, btn) {
   const inst = StylusEngine.canvases[id];
@@ -260,7 +370,7 @@ function toggleCanvasGrid(wrapId, btn) {
 }
 
 function clearCanvasPrompt(id) {
-  if (confirm("Clear your notes and drawings on this workspace?")) {
+  if (confirm("Clear your notes and drawings on this workspace? (You can use Undo to revert)")) {
     StylusEngine.clearCanvas(id);
     const textLayer = document.getElementById(id.replace('can-', 'text-'));
     if (textLayer) {
@@ -271,15 +381,21 @@ function clearCanvasPrompt(id) {
 }
 
 // ==========================================================================
-// 2. FULL-SCREEN IPAD SCREEN PEN OVERLAY
+// 2. FULL-SCREEN IPAD SCREEN PEN OVERLAY (Ultra-Smooth & Undo)
 // ==========================================================================
 const FullScreenPen = {
   active: false,
   canvas: null,
   ctx: null,
   isDrawing: false,
-  lastX: 0,
-  lastY: 0,
+  stylusOnlyMode: true,
+  history: [],
+  lastSnapshot: null,
+  prevX: 0,
+  prevY: 0,
+  lastMidX: 0,
+  lastMidY: 0,
+  hasMoved: false,
   color: '#6c5ce7',
   strokeWidth: 6,
   isEraser: false,
@@ -290,14 +406,14 @@ const FullScreenPen = {
     this.canvas = document.getElementById('fullscreenPenCanvas');
     if (!this.canvas) return;
 
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
     this.canvas.addEventListener('pointerdown', (e) => this.start(e));
     this.canvas.addEventListener('pointermove', (e) => this.draw(e));
-    this.canvas.addEventListener('pointerup', () => this.stop());
-    this.canvas.addEventListener('pointercancel', () => this.stop());
+    this.canvas.addEventListener('pointerup', (e) => this.stop(e));
+    this.canvas.addEventListener('pointercancel', (e) => this.stop(e));
 
     const btn = document.getElementById('fullscreenPenBtn');
     if (btn) btn.addEventListener('click', () => this.toggle());
@@ -335,21 +451,22 @@ const FullScreenPen = {
   },
 
   start(e) {
+    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+
     this.isDrawing = true;
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
-  },
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
 
-  draw(e) {
-    if (!this.isDrawing) return;
-    const currentX = e.clientX;
-    const currentY = e.clientY;
+    this.lastSnapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.lastX, this.lastY);
-    const midX = (this.lastX + currentX) / 2;
-    const midY = (this.lastY + currentY) / 2;
-    this.ctx.quadraticCurveTo(this.lastX, this.lastY, midX, midY);
+    const x = e.clientX;
+    const y = e.clientY;
+    this.prevX = x;
+    this.prevY = y;
+    this.lastMidX = x;
+    this.lastMidY = y;
+    this.hasMoved = false;
 
     if (this.isEraser) {
       this.ctx.globalCompositeOperation = 'destination-out';
@@ -364,17 +481,81 @@ const FullScreenPen = {
       this.ctx.lineWidth = this.strokeWidth;
     }
 
-    this.ctx.stroke();
-    this.lastX = currentX;
-    this.lastY = currentY;
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, (this.isEraser ? this.strokeWidth * 2 : this.strokeWidth / 2), 0, Math.PI * 2);
+    this.ctx.fillStyle = this.isEraser ? 'rgba(0,0,0,1)' : (this.strokeWidth >= 12 ? 'rgba(253, 203, 110, 0.45)' : this.color);
+    this.ctx.fill();
   },
 
-  stop() {
+  draw(e) {
+    if (this.stylusOnlyMode && e.pointerType === 'touch') return;
+    if (!this.isDrawing) return;
+
+    const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length > 0)
+      ? e.getCoalescedEvents()
+      : [e];
+
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      const currentX = ev.clientX;
+      const currentY = ev.clientY;
+
+      const dx = currentX - this.prevX;
+      const dy = currentY - this.prevY;
+      if (dx * dx + dy * dy < 0.2) continue;
+
+      this.hasMoved = true;
+      const midX = (this.prevX + currentX) / 2;
+      const midY = (this.prevY + currentY) / 2;
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastMidX, this.lastMidY);
+      this.ctx.quadraticCurveTo(this.prevX, this.prevY, midX, midY);
+      this.ctx.stroke();
+
+      this.lastMidX = midX;
+      this.lastMidY = midY;
+      this.prevX = currentX;
+      this.prevY = currentY;
+    }
+  },
+
+  stop(e) {
+    if (!this.isDrawing) return;
     this.isDrawing = false;
+    if (e && e.pointerId) {
+      try {
+        this.canvas.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+
+    if (this.hasMoved) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastMidX, this.lastMidY);
+      this.ctx.lineTo(this.prevX, this.prevY);
+      this.ctx.stroke();
+    }
+
+    if (this.lastSnapshot) {
+      this.history.push(this.lastSnapshot);
+      if (this.history.length > 30) this.history.shift();
+      this.lastSnapshot = null;
+    }
+  },
+
+  undo() {
+    if (!this.history || this.history.length === 0) return;
+    const prevState = this.history.pop();
+    this.ctx.putImageData(prevState, 0, 0);
+    AudioEngine.click();
   },
 
   clear() {
-    this.ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    if (this.ctx && this.canvas) {
+      const snapshot = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+      this.history.push(snapshot);
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
     AudioEngine.click();
   },
 
@@ -394,6 +575,10 @@ const FullScreenPen = {
     clearInterval(this.timerInterval);
   }
 };
+
+function undoFsCanvas() {
+  FullScreenPen.undo();
+}
 
 function setFsPenColor(col, dot) {
   FullScreenPen.color = col;
@@ -1183,8 +1368,14 @@ function renderConceptTab(data) {
               <button class="tool-btn" onclick="setCanvasEraser('${idea.tryCanvasId}', this)">
                 <i class="fa-solid fa-eraser"></i> Eraser
               </button>
+              <button class="tool-btn btn-undo" onclick="undoCanvas('${idea.tryCanvasId}')" title="Undo last stroke (تراجع عن آخر خطوة)">
+                <i class="fa-solid fa-rotate-left"></i> Undo
+              </button>
               <button class="tool-btn" onclick="toggleCanvasGrid('can-wrap-${idea.id}', this)">
                 <i class="fa-solid fa-border-all"></i> Grid
+              </button>
+              <button class="tool-btn stylus-indicator active" onclick="toggleStylusMode(this)" title="وضع قلم الآبل / ستايلس فقط: مفعل لمنع التقطيع ورفض راحة اليد (Palm Rejection)">
+                <i class="fa-solid fa-pen-nib"></i> <span class="stylus-mode-text">Stylus Only</span>
               </button>
             </div>
 

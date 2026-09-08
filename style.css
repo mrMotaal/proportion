@@ -1169,6 +1169,30 @@ body {
   box-shadow: 0 2px 8px var(--primary-glow);
 }
 
+.tool-btn.btn-undo {
+  color: var(--text-main);
+}
+.tool-btn.btn-undo:hover {
+  background: hsla(38, 98%, 56%, 0.14);
+  border-color: var(--accent-amber);
+  color: hsl(38, 98%, 45%);
+}
+
+.tool-btn.stylus-indicator {
+  background: hsla(242, 85%, 62%, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 0.76rem;
+  letter-spacing: 0.2px;
+}
+.tool-btn.stylus-indicator.touch-allowed {
+  background: var(--bg-surface);
+  border-color: var(--border-light);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .color-dot {
   width: 22px;
   height: 22px;
@@ -1206,6 +1230,9 @@ body {
     linear-gradient(var(--notebook-line) 1px, transparent 1px);
   background-size: 100% 32px;
   background-position: 0 24px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .notebook-canvas-wrap.grid-bg {
